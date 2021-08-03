@@ -8,13 +8,13 @@ const server = require('http').createServer(async (request, response) => {
         if (queryObject.key) {
             const address = request.headers['x-forwarded-for']?.split(',').shift() || request.socket?.remoteAddress;
 
-            let start = new Date();
-            start.setHours(0, 0, 0, 0);
-            let end = new Date();
-            end.setHours(23, 59, 59, 999);
+            let now = new Date(Date.now() + (9 * 3600 * 1000)); // UTC를 한국 시간으로 변경. UTC+09:00
+            now.setHours(0, 0, 0, 0); // 한국시간에서 하루의 시작 시간으로 변경.
+            const startUtc = new Date(now.getTime() - (9 * 3600 * 1000)) // 한국의 시작시간에서 UTC로 변경.
+            const endUtc = new Date(startUtc.getTime() + (24 * 3600 * 1000)); // 시작시간에서 하루 만큼.
 
             if (!(await visitorModel
-                .findOne({ address: address, key: queryObject.key, visitedDate: { $gte: start, $lt: end } })
+                .findOne({ address: address, key: queryObject.key, visitedDate: { $gte: startUtc, $lt: endUtc } })
                 .lean()
                 .exec())) {
                 await visitorModel.create({
@@ -29,12 +29,10 @@ const server = require('http').createServer(async (request, response) => {
                 .lean()
                 .exec() || 0;
             const todayVisitorCount = await visitorModel
-                .find({ key: queryObject.key })
+                .find({ key: queryObject.key, visitedDate: { $gte: startUtc, $lt: endUtc } })
                 .count()
                 .lean()
                 .exec() || 0;
-
-            response.writeHead(200, { "Content-Type": "image/svg+xml" });
 
             const title = "방문자";
             const counterText = `${todayVisitorCount} / ${totalVisitorCount}`;
@@ -65,7 +63,9 @@ const server = require('http').createServer(async (request, response) => {
                     <text x="${titleTextWidth + (counterTextWidth / 2.0) - 1}" y="14" fill="#fff"> ${counterText} </text>
                 </g>
             </svg>
-            `
+            `;
+
+            response.writeHead(200, { "Content-Type": "image/svg+xml" });
             response.end(responseText);
         } else {
             response.statusCode = 404;
