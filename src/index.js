@@ -2,7 +2,6 @@ const visitorModel = require('./models/VisitorModel.js');
 const url = require('url');
 
 const createCounterSvg = (title, text) => {
-    const title = "방문자";
     const titleTextWidth = 45;
     const counterTextWidth = 45 + ((text.length - 5) * 6);
 
@@ -38,7 +37,7 @@ const createCounterSvg = (title, text) => {
 require('./db.js')();
 const server = require('http').createServer(async (request, response) => {
     if (request.method === 'GET') {
-        const queryObject = new URL(request.url, true).query;
+        const queryObject = url.parse(request.url, true).query;
         if (queryObject.key) {
             const address = request.headers['x-forwarded-for']?.split(',').shift() || request.socket?.remoteAddress;
 
@@ -68,7 +67,13 @@ const server = require('http').createServer(async (request, response) => {
                 .lean()
                 .exec() || 0;
 
-            response.writeHead(200, { "Content-Type": "image/svg+xml" });
+            console.log(`Connection: ${address}, [${queryObject.key}]`);
+
+            response.writeHead(200, {
+                "Content-Type": "image/svg+xml",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Expires": "0"
+            });
             response.end(createCounterSvg("방문자", `${todayVisitorCount} / ${totalVisitorCount}`));
         } else {
             response.statusCode = 404;
