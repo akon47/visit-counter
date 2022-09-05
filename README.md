@@ -1,6 +1,6 @@
 # visit-counter
 
-visit-counter 프로젝트는 제 노션 이력서 페이지에 몇 명이 방문하는지 확인하고 싶어서 만든 프로젝트입니다.
+visit-counter 프로젝트는 특정 페이지의 방문자의 수를 집계하고 싶어서 만들게 된 프로젝트입니다.
 hits 라는 오픈소스 프로젝트가 있지만, 중복 IP에 대한 처리가 없어 새로고침하면 계속적으로 hits값이 올라가는 문제가 있어 직접 만들게 되었습니다.
 
 <a href="https://counter.kimhwan.kr?key=visit-counter-readme">
