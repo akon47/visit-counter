@@ -1,0 +1,35 @@
+# visit-counter VM (10.10.10.220). TLS is terminated by the nginx gateway LXC, which proxies
+# counter.kimhwan.kr -> http://10.10.10.220:8080 and sets X-Real-IP (from Cloudflare's CF-Connecting-IP).
+# Deployed by Jenkins (APP_TAG=<build number> ./deploy.sh); the SQLite database lives in ./data.
+name: visit-counter
+
+services:
+  app:
+    image: akon47/visit-counter:${APP_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "10.10.10.220:8080:8080"
+    environment:
+      PORT: "8080"
+      HOST: "0.0.0.0"
+      DATA_DIR: /data
+      TIMEZONE: Asia/Seoul
+      TRUSTED_PROXY: "true"
+      VISIT_RETENTION_DAYS: "7"
+    volumes:
+      - ./data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
