@@ -46,4 +46,15 @@ export const migrations: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 2,
+    name: "legacy-import-markers",
+    sql: `
+      -- Ids of v1 documents that were already replayed, so re-importing (even after visits were pruned)
+      -- never counts a document twice.
+      CREATE TABLE legacy_imported (
+        id TEXT PRIMARY KEY
+      ) STRICT, WITHOUT ROWID;
+    `,
+  },
 ];

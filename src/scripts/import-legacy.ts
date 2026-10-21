@@ -4,10 +4,9 @@
  *   node dist/scripts/import-legacy.js <visitors.json>
  *
  * Input: the `visitors` collection exported by mongo-express or mongoexport, either a JSON array or one
- * JSON object per line. Each document has { key, address, visitedDate } (dates as ISO strings or
- * {"$date": "..."}). Every document is replayed through the normal visit path, so the same rules apply
- * (one count per visitor per key per day in TIMEZONE) and re-running the import is harmless: visitors
- * already recorded for that day are skipped. Uses DATA_DIR / TIMEZONE / VISIT_RETENTION_DAYS like the server.
+ * JSON object per line. Each document has { _id, key, address, visitedDate } (dates as ISO strings or
+ * {"$date": "..."}). Safe to run repeatedly and with newer exports (see src/legacy/import.ts).
+ * Uses DATA_DIR / TIMEZONE / VISIT_RETENTION_DAYS like the server.
  */
 import { createReadStream } from "node:fs";
 import { join } from "node:path";
@@ -16,24 +15,7 @@ import { loadConfig } from "../config.js";
 import { CounterRepository } from "../counter/repository.js";
 import { CounterService } from "../counter/service.js";
 import { openDatabase } from "../db/database.js";
-
-interface LegacyDoc {
-  key?: unknown;
-  address?: unknown;
-  visitedDate?: unknown;
-  createdAt?: unknown;
-}
-
-function parseDate(value: unknown): Date | undefined {
-  if (typeof value === "string" || typeof value === "number") {
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? undefined : d;
-  }
-  if (value && typeof value === "object" && "$date" in value) {
-    return parseDate(value.$date);
-  }
-  return undefined;
-}
+import { importLegacyDocuments, type LegacyDoc } from "../legacy/import.js";
 
 async function* readDocuments(path: string): AsyncGenerator<LegacyDoc> {
   const rl = createInterface({ input: createReadStream(path, { encoding: "utf8" }), crlfDelay: Infinity });
@@ -47,7 +29,7 @@ async function* readDocuments(path: string): AsyncGenerator<LegacyDoc> {
       yield JSON.parse(trimmed) as LegacyDoc; // JSON lines
       continue;
     }
-    buffered += line; // JSON array spread over lines (or on one line)
+    buffered += line; // JSON array, possibly spread over lines
   }
   if (buffered.trim()) {
     const parsed = JSON.parse(buffered) as unknown;
@@ -74,48 +56,13 @@ async function main(): Promise<void> {
     retentionDays: config.VISIT_RETENTION_DAYS,
   });
 
-  let seen = 0;
-  let counted = 0;
-  let skipped = 0;
-  const keys = new Set<string>();
-  // Replay in one transaction per batch for speed.
-  let batch: { key: string; address: string; at: Date }[] = [];
-  const flush = () => {
-    repo.transaction(() => {
-      for (const doc of batch) {
-        if (service.recordVisit(doc.key, doc.address, doc.at).counted) {
-          counted += 1;
-        }
-        keys.add(doc.key);
-      }
-    });
-    batch = [];
-  };
-
-  for await (const doc of readDocuments(file)) {
-    seen += 1;
-    const key = typeof doc.key === "string" ? doc.key.trim() : "";
-    const address = typeof doc.address === "string" ? doc.address.trim() : "";
-    const at = parseDate(doc.visitedDate) ?? parseDate(doc.createdAt);
-    if (!key || !address || !at) {
-      skipped += 1;
-      continue;
-    }
-    batch.push({ key, address, at });
-    if (batch.length >= 1000) {
-      flush();
-    }
-  }
-  flush();
-
-  // Keep the dedup set small after a bulk import (totals and daily counts stay).
+  const summary = await importLegacyDocuments(readDocuments(file), { repo, service });
+  // Keep the dedup set small after a bulk import; totals and daily counts stay, and legacy_imported
+  // guards against re-counting.
   const pruned = service.prune();
-  repo.setMeta(
-    "legacy_import",
-    JSON.stringify({ file, at: new Date().toISOString(), seen, counted, skipped }),
-  );
+  repo.setMeta("legacy_import", JSON.stringify({ file, at: new Date().toISOString(), ...summary }));
   db.close();
-  console.log(JSON.stringify({ seen, counted, skipped, keys: keys.size, pruned }));
+  console.log(JSON.stringify({ ...summary, pruned }));
 }
 
 main().catch((err: unknown) => {

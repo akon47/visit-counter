@@ -33,6 +33,9 @@ export class CounterRepository {
         "INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
       ),
       ping: db.prepare("SELECT 1"),
+      markLegacyImported: db.prepare(
+        "INSERT INTO legacy_imported (id) VALUES (?) ON CONFLICT(id) DO NOTHING",
+      ),
     };
   }
 
@@ -85,6 +88,11 @@ export class CounterRepository {
 
   setMeta(k: string, v: string): void {
     this.stmts.setMeta.run(k, v);
+  }
+
+  /** Records a v1 document id; returns false when that document was imported before. */
+  markLegacyImported(id: string): boolean {
+    return this.stmts.markLegacyImported.run(id).changes === 1;
   }
 
   ping(): void {

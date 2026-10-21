@@ -82,4 +82,5 @@ v1(MongoDB) 의 `visitors` 컬렉션을 JSON(배열 또는 줄 단위)으로 내
 docker compose run --rm -v "$PWD/legacy:/legacy:ro" app node dist/scripts/import-legacy.js /legacy/visitors.json
 ```
 
-문서마다 일반 방문과 같은 규칙으로 다시 재생하므로 여러 번 실행해도 중복으로 세지 않습니다.
+문서마다 일반 방문과 같은 규칙으로 다시 재생합니다. 처리한 문서의 `_id` 를 `legacy_imported` 표에 기록하므로 같은 파일을
+다시 돌리거나(중복 제거 행이 정리된 뒤라도) 옛 문서를 포함한 더 새로운 export 를 돌려도 새 문서만 더해집니다.
